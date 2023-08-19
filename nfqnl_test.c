@@ -126,7 +126,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
                     printf("Host: %s\n", host_start);
 
-                    // 차단할 호스트명인 경우
+                    
                     if (strcmp(host_start, black_list) == 0) {
                         printf("Blocked host detected!\n");
                         return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
