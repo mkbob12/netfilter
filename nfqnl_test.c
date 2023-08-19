@@ -10,11 +10,15 @@
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <libnet.h>
+#include <string.h>
+
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
 
 
 /* returns packet id */
 
-char* packet; 
+char* black_list;
 
 void dump(unsigned char* buf, int size) {
 	int i;
@@ -89,28 +93,57 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	      struct nfq_data *nfa, void *data)
 {
-	u_int32_t id = print_pkt(nfa);
-	struct nfqnl_msg_packet_hdr *ph;
-	unsigned char *packet;
+	 u_int32_t id = print_pkt(nfa);
+    struct nfqnl_msg_packet_hdr *ph;
+    unsigned char *packet;
 
-	int ret;
-	ret = nfq_get_payload(nfa, &packet);
+    int ret;
+    ret = nfq_get_payload(nfa, &packet);
 
+    // ipheader 
+    struct libnet_ipv4_hdr *iph = (struct libnet_ipv4_hdr *) packet;
+    struct tcphdr *tcph = (struct tcphdr*) (packet + (iph->ip_hl * 4));
+    
+	unsigned char *tcp_len = packet + (iph->ip_hl * 4) + (tcph->th_off* 4);
+	printf("tcp len%d", tcp_len);
+    ph = nfq_get_msg_packet_hdr(nfa);
+
+
+	printf("\n tcp %02x ",ntohs(tcph->th_dport));
+
+    if(ntohs(tcph->th_dport) == 80){
+        char *http = (char *)(tcp_len);
+        printf("http %s", http);
+        if (strncmp(http, "GET", 3) == 0) {
+            // Search for "Host: " in HTTP request
+			printf("jhellp");
+            char *host_start = strstr(http, "Host: ");
+            if (host_start) {
+                host_start += 6; // Move to start of host name
+                char *host_end = strchr(host_start, '\r');
+                if (host_end) {
+                    *host_end = '\0'; // Null-terminate the host name
+
+                    printf("Host: %s\n", host_start);
+
+                    // 차단할 호스트명인 경우
+                    if (strcmp(host_start, black_list) == 0) {
+                        printf("Blocked host detected!\n");
+                        return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
+                    }
+                }
+            }
+        }
+		
+	}
 	
 
-	// ipheader 
-	struct libnet_ethernet_hdr *ethernet;
-	struct libnet_ipv4_hdr *ipv4;
-	struct libnet_tcp_hdr *tcp;
-	
-	ethernet = (struct libnet_ethernet_hdr *)packet;
-	ipv4 = (struct libnet_ipv4_hdr *) (packet+sizeof(*ethernet));
-	tcp = (struct libnet_tcp_hdr *) (packet+sizeof(*ethernet)+sizeof(*ipv4));
+	//printf("th_dport %d", ntohs(ph->hw_protocol));
 
+	//if (tcp ->th_dport == "")
 	
-	
+	//dump(tcp,)
 
-	printf("tcp header len %d", sizeof(*tcp));
 	printf("entering callback\n");
 
 }
@@ -124,7 +157,7 @@ int main(int argc, char **argv)
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
 
-	packet = argv[1]; 
+	black_list = argv[1]; 
 
 
 
