@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -5,19 +6,164 @@
 #include <linux/types.h>
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
+#include <stdbool.h>
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
-
-
-void dump(unsigned char* buf, int size);
-static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
-	      struct nfq_data *nfa, void *data);
-
 /* returns packet id */
-static u_int32_t print_pkt (struct nfq_data *tb);
+
+char packet[22]; 
+char *argv_packet;
+
+char *packet1; 
+void dump(unsigned char* buf, int size) {
+	int i;
+	for (i = 0  ; i < size; i++) {
+		if (i != 0 && i % 16 == 0)
+			printf("\n");
+		printf("%02X ", buf[i]);
+	}
+	printf("\n");
+       
+
+	int j ; 
+	char temp[22];
+
+	printf("ip packet \n");
+	j = 0; 
+	for (i= 68; i <90 ; i++)
+		
+	{
+		temp[j] = buf[i];
+		if(j!=0  && j % 16 == 0) 
+			printf("\n");
+		
+		printf("%02X ", temp[j]);
+	
+		j++;
+	}
+	printf("\n");
+
+	
+	printf("packet\n");
+	j = 0;
+	for (i = 6  ; i  < 22 ; i++)
+	{
+		packet[j] = temp[i];
+		if ( j  % 16 == 0 )
+			printf("\n");
+		printf("%02X ", temp[i]);
+		j++;
+	}
+	printf("\n");
+	
+	
+
+       
+
+}
 
 
+static u_int32_t print_pkt (struct nfq_data *tb)
+{
+	int id = 0;
+	struct nfqnl_msg_packet_hdr *ph;
+	struct nfqnl_msg_packet_hw *hwph;
+	u_int32_t mark,ifi;
+	int ret;
+	unsigned char *data;
+
+	
+
+	ph = nfq_get_msg_packet_hdr(tb);
+	if (ph) {
+		id = ntohl(ph->packet_id);
+		printf("hw_protocol=0x%04x hook=%u id=%u ",
+			ntohs(ph->hw_protocol), ph->hook, id);
+	}
+
+	hwph = nfq_get_packet_hw(tb);
+	if (hwph) {
+		int i, hlen = ntohs(hwph->hw_addrlen);
+
+		printf("hw_src_addr=");
+		for (i = 0; i < hlen-1; i++)
+			printf("%02x:", hwph->hw_addr[i]);
+		printf("%02x ", hwph->hw_addr[hlen-1]);
+	}	
+	
+
+	mark = nfq_get_nfmark(tb);
+	if (mark)
+		printf("mark=%u ", mark);
+
+	ifi = nfq_get_indev(tb);
+	if (ifi)
+		printf("indev=%u ", ifi);
+
+	ifi = nfq_get_outdev(tb);
+	if (ifi)
+		printf("outdev=%u ", ifi);
+	ifi = nfq_get_physindev(tb);
+	if (ifi)
+		printf("physindev=%u ", ifi);
+
+	ifi = nfq_get_physoutdev(tb);
+	if (ifi)
+		printf("physoutdev=%u ", ifi);
+
+	ret = nfq_get_payload(tb, &data);
+	if (ret >= 0)
+		printf("payload_len=%d\n", ret);
+                dump(data,ret);
+	fputc('\n', stdout);
+
+	return id;
+}
+
+
+static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
+	      struct nfq_data *nfa, void *data)
+{
+	u_int32_t id = print_pkt(nfa);
+
+
+	printf("entering callback\n");
+    
+	printf("argv packet");
+
+	for (int j =0 ; j < 22; j++)
+
+	{	
+		printf("%02x", argv_packet[j]);
+	}
+    
+
+	int  type;
+    type = 0;
+	for(int i =0 ; i < 22 ; i++){
+		if (packet[i] != argv_packet[i]) {
+			type = 0;
+			
+		
+		}
+		else{
+			type = 1;
+		}
+	
+	}
+
+	
+    printf("\n type %d", type); 	
+	//if (type == 1){
+		//return nfq_set_verdict(qh, id ,NF_DROP,0,NULL);
+	//}
+
+	return nfq_set_verdict(qh, id, NF_ACCEPT,0, NULL);
+
+	
+
+}
 
 int main(int argc, char **argv)
 {
@@ -27,7 +173,24 @@ int main(int argc, char **argv)
 	int fd;
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
+	//printf("argb1 %c", argv[1]);
 	
+	//cout << argv[1] << endl;
+	printf("argv[1] %s", argv[1]);
+	
+	for (int i = 0; i < sizeof(argv[1]); i++){
+	
+		printf("%02x",argv[i]);
+	}
+
+	printf("\n");
+	argv_packet = argv[1];
+    
+
+
+
+
+
 
 	printf("opening library handle\n");
 	h = nfq_open();
@@ -44,16 +207,13 @@ int main(int argc, char **argv)
 
 	printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
 	if (nfq_bind_pf(h, AF_INET) < 0) {
+	
 		fprintf(stderr, "error during nfq_bind_pf()\n");
 		exit(1);
 	}
 
 	printf("binding this socket to queue '0'\n");
-	printf("");
 	qh = nfq_create_queue(h,  0, &cb, NULL);
-	
-	
-
 	if (!qh) {
 		fprintf(stderr, "error during nfq_create_queue()\n");
 		exit(1);
@@ -102,87 +262,5 @@ int main(int argc, char **argv)
 	nfq_close(h);
 
 	exit(0);
-};
+}
 
-
-void dump(unsigned char* buf, int size) {
-	int i;
-	for (i = 0; i < size; i++) {
-		if (i != 0 && i % 16 == 0)
-			printf("\n");
-		printf("%02X ", buf[i]);
-	}
-	printf("\n");
-};
-
-
-
-
-
-
-
-
-
-static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
-	      struct nfq_data *nfa, void *data)
-{
-	u_int32_t id = print_pkt(nfa);
-	printf("entering callback\n");
-	return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-};
-
-
-/* returns packet id */
-static u_int32_t print_pkt (struct nfq_data *tb)
-{
-	int id = 0;
-	struct nfqnl_msg_packet_hdr *ph;
-	struct nfqnl_msg_packet_hw *hwph;
-	u_int32_t mark,ifi;
-	int ret;
-	unsigned char *data;
-
-	ph = nfq_get_msg_packet_hdr(tb);
-	if (ph) {
-		id = ntohl(ph->packet_id);
-		printf("hw_protocol=0x%04x hook=%u id=%u ",
-			ntohs(ph->hw_protocol), ph->hook, id);
-	}
-
-	hwph = nfq_get_packet_hw(tb);
-	if (hwph) {
-		int i, hlen = ntohs(hwph->hw_addrlen);
-
-		printf("hw_src_addr=");
-		for (i = 0; i < hlen-1; i++)
-			printf("%02x:", hwph->hw_addr[i]);
-		printf("%02x ", hwph->hw_addr[hlen-1]);
-	}
-
-	mark = nfq_get_nfmark(tb);
-	if (mark)
-		printf("mark=%u ", mark);
-
-	ifi = nfq_get_indev(tb);
-	if (ifi)
-		printf("indev=%u ", ifi);
-
-	ifi = nfq_get_outdev(tb);
-	if (ifi)
-		printf("outdev=%u ", ifi);
-	ifi = nfq_get_physindev(tb);
-	if (ifi)
-		printf("physindev=%u ", ifi);
-
-	ifi = nfq_get_physoutdev(tb);
-	if (ifi)
-		printf("physoutdev=%u ", ifi);
-
-	ret = nfq_get_payload(tb, &data);
-	if (ret >= 0)
-		printf("payload_len=%d\n", ret);
-
-	fputc('\n', stdout);
-
-	return id;
-};
