@@ -9,13 +9,13 @@
 #include <stdbool.h>
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
+#include <libnet.h>
+
 
 /* returns packet id */
 
-char packet[22]; 
-char *argv_packet;
+char* packet; 
 
-char *packet1; 
 void dump(unsigned char* buf, int size) {
 	int i;
 	for (i = 0  ; i < size; i++) {
@@ -24,42 +24,6 @@ void dump(unsigned char* buf, int size) {
 		printf("%02X ", buf[i]);
 	}
 	printf("\n");
-       
-
-	int j ; 
-	char temp[22];
-
-	printf("ip packet \n");
-	j = 0; 
-	for (i= 68; i <90 ; i++)
-		
-	{
-		temp[j] = buf[i];
-		if(j!=0  && j % 16 == 0) 
-			printf("\n");
-		
-		printf("%02X ", temp[j]);
-	
-		j++;
-	}
-	printf("\n");
-
-	
-	printf("packet\n");
-	j = 0;
-	for (i = 6  ; i  < 22 ; i++)
-	{
-		packet[j] = temp[i];
-		if ( j  % 16 == 0 )
-			printf("\n");
-		printf("%02X ", temp[i]);
-		j++;
-	}
-	printf("\n");
-	
-	
-
-       
 
 }
 
@@ -126,42 +90,28 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	      struct nfq_data *nfa, void *data)
 {
 	u_int32_t id = print_pkt(nfa);
+	struct nfqnl_msg_packet_hdr *ph;
+	unsigned char *packet;
 
+	int ret;
+	ret = nfq_get_payload(nfa, &packet);
 
+	
+
+	// ipheader 
+	struct libnet_ethernet_hdr *ethernet;
+	struct libnet_ipv4_hdr *ipv4;
+	struct libnet_tcp_hdr *tcp;
+	
+	ethernet = (struct libnet_ethernet_hdr *)packet;
+	ipv4 = (struct libnet_ipv4_hdr *) (packet+sizeof(*ethernet));
+	tcp = (struct libnet_tcp_hdr *) (packet+sizeof(*ethernet)+sizeof(*ipv4));
+
+	
+	
+
+	printf("tcp header len %d", sizeof(*tcp));
 	printf("entering callback\n");
-    
-	printf("argv packet");
-
-	for (int j =0 ; j < 22; j++)
-
-	{	
-		printf("%02x", argv_packet[j]);
-	}
-    
-
-	int  type;
-    type = 0;
-	for(int i =0 ; i < 22 ; i++){
-		if (packet[i] != argv_packet[i]) {
-			type = 0;
-			
-		
-		}
-		else{
-			type = 1;
-		}
-	
-	}
-
-	
-    printf("\n type %d", type); 	
-	//if (type == 1){
-		//return nfq_set_verdict(qh, id ,NF_DROP,0,NULL);
-	//}
-
-	return nfq_set_verdict(qh, id, NF_ACCEPT,0, NULL);
-
-	
 
 }
 
@@ -173,26 +123,12 @@ int main(int argc, char **argv)
 	int fd;
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
-	//printf("argb1 %c", argv[1]);
-	
-	//cout << argv[1] << endl;
-	printf("argv[1] %s", argv[1]);
-	
-	for (int i = 0; i < sizeof(argv[1]); i++){
-	
-		printf("%02x",argv[i]);
-	}
 
-	printf("\n");
-	argv_packet = argv[1];
-    
+	packet = argv[1]; 
 
 
 
-
-
-
-	printf("opening library handle\n");
+	printf("opening library handle\n");	
 	h = nfq_open();
 	if (!h) {
 		fprintf(stderr, "error during nfq_open()\n");
