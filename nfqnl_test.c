@@ -81,9 +81,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 		printf("physoutdev=%u ", ifi);
 
 	ret = nfq_get_payload(tb, &data);
-	if (ret >= 0)
-		printf("payload_len=%d\n", ret);
-                dump(data,ret);
+	if (ret >= 0){
+                printf("payload_len=%d\n", ret);
+                //dump(data,ret);
+	}
+		
 	fputc('\n', stdout);
 
 	return id;
@@ -94,7 +96,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	      struct nfq_data *nfa, void *data)
 {
 	 u_int32_t id = print_pkt(nfa);
-    struct nfqnl_msg_packet_hdr *ph;
+
     unsigned char *packet;
 
     int ret;
@@ -106,7 +108,6 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     
 	unsigned char *tcp_len = packet + (iph->ip_hl * 4) + (tcph->th_off* 4);
 	printf("tcp len%d", tcp_len);
-    ph = nfq_get_msg_packet_hdr(nfa);
 
 
 	printf("\n tcp %02x ",ntohs(tcph->th_dport));
@@ -116,7 +117,6 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         printf("http %s", http);
         if (strncmp(http, "GET", 3) == 0) {
             // Search for "Host: " in HTTP request
-			printf("jhellp");
             char *host_start = strstr(http, "Host: ");
             if (host_start) {
                 host_start += 6; // Move to start of host name
@@ -140,12 +140,12 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 	//printf("th_dport %d", ntohs(ph->hw_protocol));
 
-	//if (tcp ->th_dport == "")
+	//if (tcp ->th_dport == "
 	
 	//dump(tcp,)
 
 	printf("entering callback\n");
-
+	return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
 int main(int argc, char **argv)
@@ -232,4 +232,3 @@ int main(int argc, char **argv)
 
 	exit(0);
 }
-
