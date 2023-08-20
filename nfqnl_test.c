@@ -95,7 +95,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	      struct nfq_data *nfa, void *data)
 {
-	 u_int32_t id = print_pkt(nfa);
+	u_int32_t id = print_pkt(nfa);
 
     unsigned char *packet;
 
