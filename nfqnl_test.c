@@ -18,7 +18,15 @@
 
 /* returns packet id */
 
-char* black_list;
+char* block_host;
+
+
+void sigint_handler(int sig) {
+    
+	system("sudo iptables -F");
+	printf("ctrl+c pressed: quitting...\n");
+    exit(0);
+}
 
 void dump(unsigned char* buf, int size) {
 	int i;
@@ -104,8 +112,8 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
     // ipheader 
     struct libnet_ipv4_hdr *iph = (struct libnet_ipv4_hdr *) packet;
-    struct tcphdr *tcph = (struct tcphdr*) (packet + (iph->ip_hl * 4));
-    
+	struct libnet_tcp_hdr *tcph= (struct libnet_tcp_hdr *) (packet + (iph->ip_hl * 4));
+        
 	unsigned char *tcp_len = packet + (iph->ip_hl * 4) + (tcph->th_off* 4);
 	printf("tcp len%d", tcp_len);
 
@@ -114,21 +122,28 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
     if(ntohs(tcph->th_dport) == 80){
         char *http = (char *)(tcp_len);
-        printf("http %s", http);
+        //printf("http %s", http);
         if (strncmp(http, "GET", 3) == 0) {
             // Search for "Host: " in HTTP request
             char *host_start = strstr(http, "Host: ");
             if (host_start) {
                 host_start += 6; // Move to start of host name
                 char *host_end = strchr(host_start, '\r');
+
+				size_t len = strlen(host_start);
+				while(len > 0 && (host_start[len-1] == '\r' || host_start[len-1] == '\n')){
+					host_start[len-1]='\0';
+					len --;
+				};
+
                 if (host_end) {
                     *host_end = '\0'; // Null-terminate the host name
 
                     printf("Host: %s\n", host_start);
 
                     
-                    if (strcmp(host_start, black_list) == 0) {
-                        printf("Blocked host detected!\n");
+                    if (strcmp(host_start, block_host) == 0) {
+                        printf("%s Blocked host detected!\n",block_host);
                         return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
                     }
                 }
@@ -157,7 +172,11 @@ int main(int argc, char **argv)
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
 
-	black_list = argv[1]; 
+	block_host = argv[1]; 
+
+	system("sudo iptables -F");
+	system("sudo iptables -A OUTPUT -j NFQUEUE --queue-num 0");
+	system("sudo iptables -A INPUT -j NFQUEUE --queue-num 0");
 
 
 
@@ -196,11 +215,21 @@ int main(int argc, char **argv)
 
 	fd = nfq_fd(h);
 
+	/*
+	
+		Read 
+	*/
+
+	// read socket data 
 	for (;;) {
 		if ((rv = recv(fd, buf, sizeof(buf), 0)) >= 0) {
 			printf("pkt received\n");
 			nfq_handle_packet(h, buf, rv);
+
+			signal(SIGINT, sigint_handler);
+
 			continue;
+
 		}
 		/* if your application is too slow to digest the packets that
 		 * are sent from kernel-space, the socket buffer that we use
@@ -213,6 +242,9 @@ int main(int argc, char **argv)
 			printf("losing packets!\n");
 			continue;
 		}
+
+
+
 		perror("recv failed");
 		break;
 	}
