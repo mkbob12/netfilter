@@ -1,0 +1,8 @@
+## git folder delete cache
+
+# git rm -r --cached . 
+
+./Makefile.am
+./Makefile.in
+./nfqnl_test
+./.vscode
