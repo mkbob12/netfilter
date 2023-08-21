@@ -2,7 +2,7 @@
 
 # git rm -r --cached . 
 
-./Makefile.am
-./Makefile.in
-./nfqnl_test
+Makefile.am
+Makefile.in
+nfqnl_test
 ./.vscode
